@@ -1,0 +1,7 @@
+#!/bin/bash
+
+no_of_monitors=$(xrandr | grep " connected" | wc -l)
+
+if [ $no_of_monitors -gt 1 ]; then
+  xrandr --output HDMI-1 --primary --mode 3840x2160 --output eDP-1 --off
+fi
