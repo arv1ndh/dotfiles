@@ -1,0 +1,5 @@
+alias gd='git diff'
+alias gc='git commit --patch --amend'
+alias ga='git commit --patch'
+alias gp='git stash && git fetch && git rebase -i develop'
+alias gbd='git branch -D'
