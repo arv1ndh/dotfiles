@@ -1,0 +1,12 @@
+[Unit]
+Description=Sync local git repo with remote (stash, pull --rebase, push)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/repos/dotfiles
+ExecStart=%h/repos/dotfiles/bin/gitsync
+
+[Install]
+WantedBy=default.target

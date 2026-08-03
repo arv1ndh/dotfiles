@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# gitsync - sync current git repo with its remote
+# stash -> pull --rebase -> pop -> push, safe rollback on failure
+set -u
+
+REPO="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+  echo "gitsync: not inside a git repository"
+  exit 0
+}
+cd "$REPO" || exit 1
+
+BRANCH="$(git branch --show-current)"
+if [ -z "$BRANCH" ]; then
+  echo "gitsync: detached HEAD, nothing to do"
+  exit 0
+fi
+
+REMOTE="$(git config --get "branch.$BRANCH.remote")"
+[ -n "$REMOTE" ] || REMOTE=origin
+
+if ! git rev-parse --quiet --verify "$REMOTE/$BRANCH" >/dev/null; then
+  echo "gitsync: no upstream $REMOTE/$BRANCH found, skipping"
+  exit 0
+fi
+
+STASHED=0
+if ! git diff --quiet --exit-code || ! git diff --quiet --cached --exit-code \
+  || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+  git stash push -u -m "gitsync $(date +%F_%T)" >/dev/null || {
+    echo "gitsync: failed to stash local changes"
+    exit 1
+  }
+  STASHED=1
+fi
+
+restore_stash() {
+  [ "$STASHED" -eq 1 ] && git stash pop >/dev/null 2>&1 || true
+}
+
+git fetch --quiet "$REMOTE" "$BRANCH" || {
+  restore_stash
+  echo "gitsync: fetch from $REMOTE/$BRANCH failed, state restored"
+  exit 1
+}
+
+if ! git rebase --quiet "$REMOTE/$BRANCH"; then
+  git rebase --abort 2>/dev/null || true
+  restore_stash
+  echo "gitsync: rebase onto $REMOTE/$BRANCH failed, state restored; resolve manually"
+  exit 1
+fi
+
+if [ "$STASHED" -eq 1 ] && ! git stash pop >/dev/null 2>&1; then
+  echo "gitsync: warning: could not pop stash; changes kept in git stash"
+fi
+
+if [ "$(git rev-list --count "$REMOTE/$BRANCH..$BRANCH")" -gt 0 ]; then
+  git push --quiet "$REMOTE" "$BRANCH" || {
+    echo "gitsync: push to $REMOTE/$BRANCH failed"
+    exit 1
+  }
+  echo "gitsync: pushed $BRANCH"
+fi
+
+echo "gitsync: done"
